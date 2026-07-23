@@ -1,0 +1,19 @@
+{
+  "name": "uspv",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Signal-routing visualizer for YAMAHA URX-series audio interfaces. Runtime is build-free: dist/bundle.js is committed and index.html runs over file://.",
+  "scripts": {
+    "build": "npm run typecheck && esbuild src/main.ts --bundle --format=iife --target=es2020 --sourcemap --outfile=dist/bundle.js",
+    "watch": "esbuild src/main.ts --bundle --format=iife --target=es2020 --sourcemap --outfile=dist/bundle.js --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

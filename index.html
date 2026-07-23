@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>URX Signal Path Visualizer v0.1.0</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <header id="app-header">
+        <!-- App Title. The title area may shrink and the title text wraps
+             when the header runs out of room (large font levels / narrow
+             windows). While the header is collapsed (hamburger, default)
+             this is the only visible content and is centered (see
+             .header-collapsed rules in css/styles.css). -->
+        <div id="header-title-area">
+            <div class="app-title">URX Signal Path Visualizer<span class="app-version">v0.1.0</span></div>
+        </div>
+
+        <!-- Free space between the title and the control groups; the flow
+             view mode chip is centered inside it. Clicking the chip bubbles
+             to the body click handler, which clears the highlight. -->
+        <div id="header-chip-area">
+            <!-- Hint text lives in CSS (::after) so hovering can swap
+                 "ESC to clear" -> "Click to Cancel" -->
+            <div id="focus-view-chip">
+                <div class="chip-idle chip-main">
+                    <span>Click a node to</span>
+                    <span>enter FOCUS VIEW</span>
+                </div>
+                <div class="chip-active">
+                    <div class="chip-main">
+                        <span class="chip-label">FOCUS VIEW</span>
+                        <span id="focus-view-chip-node"></span>
+                    </div>
+                    <span class="chip-esc"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Header control groups: all boxes stretch to one shared height.
+             When the area right of the title runs out of room it scrolls
+             horizontally instead of squashing the groups -->
+        <div id="header-controls">
+
+            <!-- SCROLL / LINES toggle groups, stacked in two rows.
+                 Labels sit on the left edge, controls align to the right
+                 edge so the two boxes read as one column. -->
+            <div class="header-col-stack">
+                <div class="toggle-group">
+                    <span class="toggle-group-label">Scroll</span>
+                    <div class="toggle-row">
+                        <label id="scroll-to-selection-toggle" class="header-toggle"
+                            title="Auto-scroll to the active nodes when the flow selection changes">
+                            <span>Selection</span>
+                            <div class="toggle-track" id="scroll-to-selection-track">
+                                <div class="toggle-thumb"></div>
+                            </div>
+                        </label>
+
+                        <label id="scroll-to-change-toggle" class="header-toggle"
+                            title="Auto-scroll to a node when its connection state or parameters change">
+                            <span>Change</span>
+                            <div class="toggle-track" id="scroll-to-change-track">
+                                <div class="toggle-thumb"></div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="toggle-group">
+                    <span class="toggle-group-label">Lines</span>
+                    <label id="hide-muted-toggle" class="header-toggle"
+                        title="Hide muted connection lines">
+                        <span>Hide Muted</span>
+                        <div class="toggle-track" id="hide-muted-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- FOCUS VIEW group: while a path is highlighted, exclude
+                 off-path changes from the effects / from Scroll to Change
+                 (path cuts and new connections into the path stay included) -->
+            <div class="toggle-group tg-col-start">
+                <span class="toggle-group-label">Focus View: Path Only</span>
+                <!-- 2-column grid: Nodes / Effects on top, Scroll below.
+                     Each cell spreads label|track, so the tracks of both
+                     rows line up on the shared column edges -->
+                <div class="focus-grid">
+                    <label id="focus-nodes-toggle" class="header-toggle"
+                        title="In FOCUS VIEW, hide off-path nodes entirely (OFF dims them instead)">
+                        <span>Nodes</span>
+                        <div class="toggle-track" id="focus-nodes-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </label>
+                    <label id="focus-effects-toggle" class="header-toggle"
+                        title="In FOCUS VIEW, suppress wipe/blink effects for off-path changes (disconnections from and new connections to the path are still shown)">
+                        <span>Effects</span>
+                        <div class="toggle-track" id="focus-effects-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </label>
+                    <label id="focus-scroll-toggle" class="header-toggle"
+                        title="In FOCUS VIEW, suppress Scroll to Change for off-path changes">
+                        <span>Scroll</span>
+                        <div class="toggle-track" id="focus-scroll-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- NODE group: caption row + the collapse/expand-all buttons,
+                 stacked vertically (equal widths) -->
+            <div class="toggle-group tg-col">
+                <span class="toggle-group-label">Node</span>
+                <div class="btn-stack">
+                    <button id="btn-collapse-all" class="view-btn"
+                        title="Collapse every section (title + horizontal meter only)">Collapse All</button>
+                    <button id="btn-expand-all" class="view-btn"
+                        title="Restore every section to the normal full view">Expand All</button>
+                </div>
+            </div>
+
+            <!-- CONFIG group: save/load the auto-saved settings as a file,
+                 buttons stacked vertically (equal widths) -->
+            <div class="toggle-group tg-col">
+                <span class="toggle-group-label">Config</span>
+                <div class="btn-stack">
+                    <button id="btn-config-export" class="view-btn"
+                        title="Export the current settings (model, toggles, collapse states, ...) as a JSON file">Export</button>
+                    <button id="btn-config-load" class="view-btn"
+                        title="Load and apply a settings JSON file (reloads the page)">Load</button>
+                    <input type="file" id="config-file-input" accept=".json,application/json">
+                </div>
+            </div>
+
+            <!-- FONT SIZE group, three tiers: label / current level /
+                 - + buttons (5 steps, level 1 = base size; drives
+                 --font-boost) -->
+            <div class="toggle-group tg-col tg-col-font">
+                <span class="toggle-group-label">Font Size</span>
+                <span id="font-size-level">1/5</span>
+                <div class="btn-row">
+                    <button id="btn-font-minus" class="view-btn"
+                        title="Decrease the overall font size by one step (5 steps)">−</button>
+                    <button id="btn-font-plus" class="view-btn"
+                        title="Increase the overall font size by one step (5 steps)">＋</button>
+                </div>
+            </div>
+
+            <!-- Connection area (DEVICE), three rows: model selection on
+                 top, link status + Connect in the middle, DEMO / DEV
+                 toggles below -->
+            <div class="toggle-group tg-col">
+                <div id="device-model-row">
+                    <span class="toggle-group-label">Device</span>
+                    <select id="model-select" title="Model selection">
+                        <option value="URX44V">URX44V</option>
+                        <option value="URX44">URX44</option>
+                        <option value="URX22">URX22</option>
+                    </select>
+                    <div id="firmware-version" title="Device System firmware version (/vd/device)">--</div>
+                </div>
+                <!-- The status pair returns here, in front of the Connect
+                     button, when the header expands (placeMiniElements in
+                     src/app/header.ts) -->
+                <div id="device-status-row">
+                    <div id="sync-status-dot"></div>
+                    <div id="sync-status">Disconnected</div>
+                    <div id="sample-rate" title="Device DSP / USB streaming sample rate (display only)">--</div>
+                    <button id="sync-connect-btn">
+                        Connect
+                    </button>
+                </div>
+                <div class="toggle-row toggle-row--end">
+                    <label id="demo-toggle" class="header-toggle"
+                        title="Demo mode: simulates device behavior without a connection">
+                        <span>DEMO</span>
+                        <div class="toggle-track" id="demo-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </label>
+                    <label id="dev-toggle" class="header-toggle"
+                        title="Developer mode: red outlines on unmapped elements, Device Center log, click-to-capture for mapping research">
+                        <span>DEV</span>
+                        <div class="toggle-track" id="dev-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Collapsed-state remnant: the model select and the connection
+             status are re-parented here while the header is collapsed
+             (see the hamburger block in js/app.js) -->
+        <div id="header-mini"></div>
+
+        <!-- Hamburger: shows/hides everything in the header except the
+             title, the model select and the connection status. Collapsed
+             is the default; the state is auto-saved. Each .bar is a pair
+             of wings (::before/::after) that morph between a straight
+             line (collapsed) and a ^ chevron (expanded) -->
+        <button id="header-menu-btn" title="Show/hide the header controls"><span
+                class="bar"></span><span class="bar"></span><span class="bar"></span></button>
+
+    </header>
+
+    <div class="container" id="main-container">
+        <svg id="svg-layer" class="lines-hidden" xmlns="http://www.w3.org/2000/svg"></svg>
+
+        <!-- 1. PHYSICAL INPUTS -->
+        <div class="section" id="col-physical-inputs"></div>
+
+        <!-- 2. INPUTS & SENDS -->
+        <div class="section" id="col-inputs"></div>
+
+        <!-- 3. FX BUSES -->
+        <div class="section" id="col-fx"></div>
+
+        <!-- 4. MIX BUSES -->
+        <div class="section" id="col-mix"></div>
+
+        <!-- 5. STEREO BUS -->
+        <div class="section" id="col-stereo"></div>
+
+        <!-- 6. LOGICAL OUTPUTS -->
+        <div class="section" id="col-logical"></div>
+
+        <!-- 7. PHYSICAL OUTPUTS -->
+        <div class="section" id="col-physical"></div>
+    </div>
+
+    <!-- dist/bundle.js is the committed esbuild output of the TypeScript
+         sources in src/ (single IIFE bundle — no ES modules at runtime, so
+         the app keeps working over file:// with no build step). To develop:
+         npm i && npm run watch; see README. Init order lives in
+         src/main.ts. -->
+    <script src="dist/bundle.js"></script>
+</body>
+
+</html>

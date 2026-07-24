@@ -1,17 +1,77 @@
 {
   "name": "uspv",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Signal-routing visualizer for YAMAHA URX-series audio interfaces. Runtime is build-free: dist/bundle.js is committed and index.html runs over file://.",
+  "author": "takashyx",
+  "main": "electron/main.cjs",
   "scripts": {
-    "build": "npm run typecheck && esbuild src/main.ts --bundle --format=iife --target=es2020 --sourcemap --outfile=dist/bundle.js",
+    "sync-version": "node scripts/sync-version.mjs",
+    "build": "npm run sync-version && npm run typecheck && esbuild src/main.ts --bundle --format=iife --target=es2020 --sourcemap --outfile=dist/bundle.js",
     "watch": "esbuild src/main.ts --bundle --format=iife --target=es2020 --sourcemap --outfile=dist/bundle.js --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "check": "npm run typecheck && npm run test && npm run build",
+    "app": "electron .",
+    "app:build": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "jp.takashyx.urxviewer",
+    "productName": "USPV",
+    "files": [
+      "electron/**",
+      "index.html",
+      "css/**",
+      "dist/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "deleteAppDataOnUninstall": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.music"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "takashyx",
+        "repo": "USPV"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.0"
   },
   "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"

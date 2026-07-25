@@ -57,6 +57,8 @@ const JA: Record<string, string> = {
         '実機の DSP / USB ストリーミングサンプルレート（表示のみ）',
     'Demo mode: simulates device behavior without a connection':
         '接続なしで実機挙動をシミュレートするデモモード',
+    'Outline every control that has no device mapping in red (steady; DEV mode shows the same outlines while picking)':
+        'デバイスマッピングを持たないコントロールを赤枠表示する（点滅なし。DEVモードでは対象選択中に同じ赤枠が出ます）',
     'Developer mode: red outlines on unmapped elements, Device Center log, click-to-capture for mapping research':
         '開発者モード: 未マッピング要素の赤枠表示・Device Centerログ・クリックでマッピング調査キャプチャ',
     'Show/hide the header controls': 'ヘッダーのコントロールを表示/非表示',

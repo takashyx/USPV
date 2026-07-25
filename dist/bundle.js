@@ -18,6 +18,7 @@
     dawVisible: { "col-physical-inputs": true, "col-physical": true },
     collapsedNodes: [],
     meterTaps: {},
+    showUnmapped: false,
     devMode: false,
     devLogRx: true,
     devLogTx: true,
@@ -280,6 +281,7 @@
     "Device System firmware version (/vd/device)": "\u5B9F\u6A5F\u306E System \u30D5\u30A1\u30FC\u30E0\u30A6\u30A7\u30A2\u30D0\u30FC\u30B8\u30E7\u30F3\uFF08/vd/device\uFF09",
     "Device DSP / USB streaming sample rate (display only)": "\u5B9F\u6A5F\u306E DSP / USB \u30B9\u30C8\u30EA\u30FC\u30DF\u30F3\u30B0\u30B5\u30F3\u30D7\u30EB\u30EC\u30FC\u30C8\uFF08\u8868\u793A\u306E\u307F\uFF09",
     "Demo mode: simulates device behavior without a connection": "\u63A5\u7D9A\u306A\u3057\u3067\u5B9F\u6A5F\u6319\u52D5\u3092\u30B7\u30DF\u30E5\u30EC\u30FC\u30C8\u3059\u308B\u30C7\u30E2\u30E2\u30FC\u30C9",
+    "Outline every control that has no device mapping in red (steady; DEV mode shows the same outlines while picking)": "\u30C7\u30D0\u30A4\u30B9\u30DE\u30C3\u30D4\u30F3\u30B0\u3092\u6301\u305F\u306A\u3044\u30B3\u30F3\u30C8\u30ED\u30FC\u30EB\u3092\u8D64\u67A0\u8868\u793A\u3059\u308B\uFF08\u70B9\u6EC5\u306A\u3057\u3002DEV\u30E2\u30FC\u30C9\u3067\u306F\u5BFE\u8C61\u9078\u629E\u4E2D\u306B\u540C\u3058\u8D64\u67A0\u304C\u51FA\u307E\u3059\uFF09",
     "Developer mode: red outlines on unmapped elements, Device Center log, click-to-capture for mapping research": "\u958B\u767A\u8005\u30E2\u30FC\u30C9: \u672A\u30DE\u30C3\u30D4\u30F3\u30B0\u8981\u7D20\u306E\u8D64\u67A0\u8868\u793A\u30FBDevice Center\u30ED\u30B0\u30FB\u30AF\u30EA\u30C3\u30AF\u3067\u30DE\u30C3\u30D4\u30F3\u30B0\u8ABF\u67FB\u30AD\u30E3\u30D7\u30C1\u30E3",
     "Show/hide the header controls": "\u30D8\u30C3\u30C0\u30FC\u306E\u30B3\u30F3\u30C8\u30ED\u30FC\u30EB\u3092\u8868\u793A/\u975E\u8868\u793A",
     "Switch language": "\u8A00\u8A9E\u5207\u66FF",
@@ -5237,6 +5239,7 @@ meters 0:1</pre>
   // src/devmode/devmode.ts
   function initDevmode() {
     let devMode = false;
+    let showUnmapped = false;
     document.body.insertAdjacentHTML("beforeend", DEV_PANEL_HTML);
     refreshTooltips();
     const panel = document.getElementById("dev-panel");
@@ -5295,10 +5298,14 @@ meters 0:1</pre>
       if (!el.id) return false;
       return !!(PARAM_MAPPINGS[el.id] || METER_MAPPINGS[el.id] || DERIVED_IDS.has(el.id));
     }
+    function unmappedWanted() {
+      if (showUnmapped) return true;
+      return devMode && (subMode === "capture" || subMode === "trymap");
+    }
     function scanUnmapped() {
       const container2 = document.getElementById("main-container");
       container2.querySelectorAll(".dev-unmapped").forEach((el) => el.classList.remove("dev-unmapped"));
-      if (!devMode || subMode !== "capture" && subMode !== "trymap") return;
+      if (!unmappedWanted()) return;
       container2.querySelectorAll(CANDIDATE_SELECTOR).forEach((el) => {
         if (!isMapped(el)) el.classList.add("dev-unmapped");
       });
@@ -5400,7 +5407,15 @@ meters 0:1</pre>
       ConfigStore.set("devMode", on);
       drawLines();
     }
+    function setShowUnmapped(on) {
+      showUnmapped = on;
+      document.getElementById("unmapped-track").classList.toggle("on", on);
+      document.body.classList.toggle("show-unmapped", on);
+      scanUnmapped();
+      ConfigStore.set("showUnmapped", on);
+    }
     document.getElementById("dev-toggle").addEventListener("click", () => setDevMode(!devMode));
+    document.getElementById("unmapped-toggle").addEventListener("click", () => setShowUnmapped(!showUnmapped));
     document.getElementById("dev-panel-min").addEventListener("click", () => {
       panel.classList.toggle("minimized");
       drawLines();
@@ -5434,7 +5449,11 @@ meters 0:1</pre>
     });
     flags.renderAll();
     trymap.render();
+    if (ConfigStore.get("showUnmapped") === true) setShowUnmapped(true);
     if (ConfigStore.get("devMode") === true) setDevMode(true);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => scanUnmapped());
+    }
   }
 
   // src/debug.ts

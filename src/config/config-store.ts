@@ -55,6 +55,7 @@ const DEFAULTS: Record<string, unknown> = {
     dawVisible: { 'col-physical-inputs': true, 'col-physical': true },
     collapsedNodes: [],
     meterTaps: {},
+    showUnmapped: false,
     devMode: false,
     devLogRx: true,
     devLogTx: true,

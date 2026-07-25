@@ -1794,10 +1794,24 @@ input[type="range"],
 
 /* ----- Developer mode (src/devmode/devmode.ts, Dev toggle in the header) ----- */
 
-/* UI controls whose id has no PARAM_MAPPINGS/METER_MAPPINGS entry */
-/* Unmapped red outlines appear ONLY while a pick is armed (between
-   pressing Pick and choosing a control) AND the CAPTURE or TRYMAP tab
-   is active; same blink period as the capture-target pulse */
+/* UI controls whose id has no PARAM_MAPPINGS/METER_MAPPINGS entry.
+   Two ways to see them, both marked with .dev-unmapped by scanUnmapped():
+
+   1. The header UNMAPPED toggle (REQUIREMENTS.md §2.7) — normal mode, no dev panel.
+      Steady outline: it stays up until the toggle goes off, and a whole
+      board of blinking outlines would be unusable.
+   2. Dev mode, ONLY while a pick is armed (between pressing Pick and
+      choosing a control) AND the CAPTURE or TRYMAP tab is active. Blinks
+      on the same period as the capture-target pulse, because it is a
+      transient "choose one of these" prompt.
+
+   The dev-picking selectors are more specific, so an armed pick blinks
+   even when the header toggle already put a steady outline up. */
+body.show-unmapped .dev-unmapped {
+    outline: 2px solid var(--accent-red, #f85149);
+    outline-offset: 1px;
+}
+
 body.dev-submode-capture.dev-picking .dev-unmapped,
 body.dev-submode-trymap.dev-picking .dev-unmapped {
     outline: 2px solid var(--accent-red, #f85149);

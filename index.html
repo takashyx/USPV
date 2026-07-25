@@ -154,8 +154,8 @@
             </div>
 
             <!-- Connection area (DEVICE), three rows: model selection on
-                 top, link status + Connect in the middle, DEMO / DEV
-                 toggles below -->
+                 top, link status + Connect in the middle, UNMAPPED / DEMO /
+                 DEV toggles below -->
             <div class="toggle-group tg-col">
                 <div id="device-model-row">
                     <span class="toggle-group-label">Device</span>
@@ -178,6 +178,15 @@
                     </button>
                 </div>
                 <div class="toggle-row toggle-row--end">
+                    <!-- Same red outlines DEV mode shows while picking a
+                         target, available without the dev panel -->
+                    <label id="unmapped-toggle" class="header-toggle"
+                        title="Outline every control that has no device mapping in red (steady; DEV mode shows the same outlines while picking)">
+                        <span>UNMAPPED</span>
+                        <div class="toggle-track" id="unmapped-track">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </label>
                     <label id="demo-toggle" class="header-toggle"
                         title="Demo mode: simulates device behavior without a connection">
                         <span>DEMO</span>

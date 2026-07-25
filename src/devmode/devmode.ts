@@ -39,6 +39,12 @@ type SubMode = 'capture' | 'ghost' | 'mislink' | 'trymap';
 export function initDevmode(): void {
     let devMode = false;
 
+    // The "UNMAPPED" header toggle (DEVICE box, left of DEMO): the same
+    // red outlines dev mode draws while a pick is armed, but available in
+    // normal use with no panel and no click swallowing. Independent of
+    // devMode in both directions — either one can request the outlines.
+    let showUnmapped = false;
+
     // ---------------------------------------------------------------
     // Panel DOM (created once, shown/hidden with the toggle)
     // ---------------------------------------------------------------
@@ -141,11 +147,19 @@ export function initDevmode(): void {
         return !!(PARAM_MAPPINGS[el.id] || METER_MAPPINGS[el.id] || DERIVED_IDS.has(el.id));
     }
 
+    // Two independent requesters: the header UNMAPPED toggle (always) and
+    // dev mode (only in the tabs that pick targets — the red pick outlines
+    // belong to those modes). The class only marks the controls; whether
+    // the outline is drawn steady or blinking is CSS's call.
+    function unmappedWanted(): boolean {
+        if (showUnmapped) return true;
+        return devMode && (subMode === 'capture' || subMode === 'trymap');
+    }
+
     function scanUnmapped(): void {
         const container = document.getElementById('main-container')!;
         container.querySelectorAll('.dev-unmapped').forEach(el => el.classList.remove('dev-unmapped'));
-        // red pick outlines belong to the modes that pick targets
-        if (!devMode || (subMode !== 'capture' && subMode !== 'trymap')) return;
+        if (!unmappedWanted()) return;
         container.querySelectorAll(CANDIDATE_SELECTOR).forEach(el => {
             if (!isMapped(el)) el.classList.add('dev-unmapped');
         });
@@ -283,7 +297,19 @@ export function initDevmode(): void {
         drawLines();
     }
 
+    // The header UNMAPPED toggle only decides whether the outlines are
+    // wanted; body.show-unmapped is what makes CSS draw them (steady, no
+    // blink — they stay up for as long as the toggle is on).
+    function setShowUnmapped(on: boolean): void {
+        showUnmapped = on;
+        document.getElementById('unmapped-track')!.classList.toggle('on', on);
+        document.body.classList.toggle('show-unmapped', on);
+        scanUnmapped();
+        ConfigStore.set('showUnmapped', on);
+    }
+
     document.getElementById('dev-toggle')!.addEventListener('click', () => setDevMode(!devMode));
+    document.getElementById('unmapped-toggle')!.addEventListener('click', () => setShowUnmapped(!showUnmapped));
     document.getElementById('dev-panel-min')!.addEventListener('click', () => {
         panel.classList.toggle('minimized');
         drawLines();
@@ -333,5 +359,18 @@ export function initDevmode(): void {
     flags.renderAll();
     trymap.render();
 
+    if (ConfigStore.get('showUnmapped') === true) setShowUnmapped(true);
     if (ConfigStore.get('devMode') === true) setDevMode(true);
+
+    // Restoring a saved toggle above scans for unmapped controls, but the
+    // broker's assignDynamicIds() — which gives ids to the elements
+    // UIBuilder built without one — is deferred to DOMContentLoaded, i.e.
+    // after this whole init. A scan before that runs sees those elements
+    // id-less and marks them unmapped even though they are mapped, so
+    // re-scan once the ids exist. initBroker() registered its
+    // DOMContentLoaded listener first (main.ts init order), so this one
+    // runs after the assignment.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => scanUnmapped());
+    }
 }

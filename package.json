@@ -1,7 +1,7 @@
 {
   "name": "uspv",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Signal-routing visualizer for YAMAHA URX-series audio interfaces. Runtime is build-free: dist/bundle.js is committed and index.html runs over file://.",
   "author": "takashyx",
   "main": "electron/main.cjs",

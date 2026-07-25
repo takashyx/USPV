@@ -1,6 +1,6 @@
 # URX Signal Path Visualizer
 
-**v0.2.0 (beta)**
+**v0.2.1 (beta)**
 
 [English](#english) | [日本語](#日本語)
 

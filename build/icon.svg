@@ -1,8 +1,30 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <!-- Editable source for build/icon.png (the app icon; electron-builder
-       generates .ico / .icns from the PNG). To regenerate the PNG, render
-       this file at 1024x1024 with any SVG rasterizer, e.g. Electron:
-       load it in a 1024x1024 offscreen window and capturePage(). -->
+  <!-- Editable source for both app icon PNGs; electron-builder generates
+       .ico / .icns from them. Regenerate with `npm run icons` (renders this
+       file twice through Electron). Opening this file directly previews the
+       Windows variant.
+
+         build/icon.png      Windows: the rounded tile is baked in, because
+                             Windows draws the bitmap as-is.
+         build/icon-mac.png  macOS: full bleed and fully opaque, because
+                             macOS draws the shape itself.
+
+       The macOS variant is NOT cosmetic. macOS 26 (Tahoe) inspects the
+       outermost pixels of the icon: alpha >= 253 gets clipped to the system
+       squircle, alpha <= 252 gets scaled down and inset into a light grey
+       rounded plate ("squircle jail") — a white-ish frame around the icon.
+       A baked-in rounded tile has transparent corners, so it always loses.
+       Hence: no rounded corners, no bevel and no transparent margin on the
+       macOS variant, and the renderer forces every alpha byte to 255.
+       Keep artwork clear of the corners; the system mask cuts them at a
+       larger radius (~230px at 1024) than the tile below uses. -->
+
+  <style>
+    /* The renderer sets class="mac" on the root to pick the macOS variant. */
+    .mac-only { display: none; }
+    svg.mac .mac-only { display: block; }
+    svg.mac .win-only { display: none; }
+  </style>
 
   <defs>
     <!-- Background depth: lighter at the top, darker toward the bottom. -->
@@ -35,10 +57,20 @@
     </filter>
   </defs>
 
-  <!-- Background: dark rounded square with a beveled border -->
-  <rect x="26" y="26" width="972" height="972" rx="104" ry="104" fill="url(#bg)"/>
-  <rect x="30" y="30" width="964" height="964" rx="100" ry="100" fill="url(#sheen)"/>
-  <rect x="26" y="26" width="972" height="972" rx="104" ry="104" fill="none" stroke="url(#bevel)" stroke-width="14"/>
+  <!-- Background, Windows: dark rounded square with a beveled border, leaving
+       a transparent margin so the tile is not flush with the canvas edge. -->
+  <g class="win-only">
+    <rect x="26" y="26" width="972" height="972" rx="104" ry="104" fill="url(#bg)"/>
+    <rect x="30" y="30" width="964" height="964" rx="100" ry="100" fill="url(#sheen)"/>
+    <rect x="26" y="26" width="972" height="972" rx="104" ry="104" fill="none" stroke="url(#bevel)" stroke-width="14"/>
+  </g>
+
+  <!-- Background, macOS: edge-to-edge and opaque, no corners and no bevel —
+       macOS applies its own squircle mask and drop shadow on top. -->
+  <g class="mac-only">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#sheen)"/>
+  </g>
 
   <!-- Signal lines framing the wordmark: a crossing pair on top, another on the
        bottom. Each line is a dark casing under a bright core plus a thin upper

@@ -7,6 +7,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "sync-version": "node scripts/sync-version.mjs",
+    "icons": "electron scripts/render-icons.cjs",
     "build": "npm run sync-version && npm run typecheck && esbuild src/main.ts --bundle --format=iife --target=es2020 --sourcemap --outfile=dist/bundle.js",
     "watch": "esbuild src/main.ts --bundle --format=iife --target=es2020 --sourcemap --outfile=dist/bundle.js --watch",
     "typecheck": "tsc --noEmit",
@@ -29,6 +30,7 @@
       "output": "release"
     },
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "nsis",
@@ -41,7 +43,11 @@
     "nsis": {
       "deleteAppDataOnUninstall": true
     },
+    "dmg": {
+      "icon": "build/icon.png"
+    },
     "mac": {
+      "icon": "build/icon-mac.png",
       "target": [
         {
           "target": "dmg",

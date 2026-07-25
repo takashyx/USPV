@@ -119,6 +119,56 @@ header {
     white-space: nowrap;
 }
 
+/* Update chip beside the app version (src/app/update-chip.ts). Only ever
+   shown in the Electron app — a browser has no updater. Blue = a new
+   version exists and the chip opens the download page; green = it is
+   downloaded and the chip restarts to apply it (Windows only). The
+   [hidden] rule is required because display below would otherwise beat
+   the attribute's UA display:none. */
+#update-chip[hidden] {
+    display: none;
+}
+
+#update-chip {
+    margin-left: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    background: rgba(88, 166, 255, 0.12);
+    border: 1px solid var(--accent-blue);
+    color: var(--accent-blue);
+    font-family: inherit;
+    font-size: calc(11px + var(--font-boost));
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+#update-chip::before {
+    content: '\2191'; /* up arrow */
+}
+
+#update-chip:hover {
+    background: rgba(88, 166, 255, 0.22);
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.35);
+}
+
+#update-chip.ready {
+    background: rgba(63, 185, 80, 0.14);
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+}
+
+#update-chip.ready:hover {
+    background: rgba(63, 185, 80, 0.24);
+    box-shadow: 0 0 10px rgba(63, 185, 80, 0.35);
+}
+
 #header-chip-area {
     flex: 1;
     display: flex;

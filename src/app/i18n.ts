@@ -62,6 +62,10 @@ const JA: Record<string, string> = {
     'Developer mode: red outlines on unmapped elements, Device Center log, click-to-capture for mapping research':
         '開発者モード: 未マッピング要素の赤枠表示・Device Centerログ・クリックでマッピング調査キャプチャ',
     'Show/hide the header controls': 'ヘッダーのコントロールを表示/非表示',
+    'A new version is available — click to open the download page':
+        '新しいバージョンがあります — クリックでダウンロードページを開きます',
+    'Update downloaded — click to restart and apply it now':
+        'アップデートのダウンロードが完了しました — クリックで再起動して適用します',
     'Switch language': '言語切替',
 
     // Sections / nodes (UIBuilder templates, collapse buttons)

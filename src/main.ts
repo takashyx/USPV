@@ -15,6 +15,7 @@ import { initModelSwitch } from './app/model-switch';
 import { initSelection } from './app/selection';
 import { initConfigButtons, initFontSize, initHeaderHamburger, initHeaderToggles, initScrollToChangeToggle } from './app/header';
 import { initI18n } from './app/i18n';
+import { initUpdateChip } from './app/update-chip';
 import { initDawToggles } from './app/daw-toggle';
 import { initCollapse } from './app/collapse';
 import { finalizeInitialLayout, initLayoutListeners } from './app/layout';
@@ -39,6 +40,7 @@ initFontSize();
 initHeaderHamburger();
 initConfigButtons();
 initI18n();                 // EN/JA toggle; translates the built DOM's tooltips
+initUpdateChip();           // title-bar update chip (Electron only; after initI18n so its tooltip is translated)
 initLayoutListeners();      // resize + scroll (capture) listeners
 finalizeInitialLayout();    // adjustSectionPadding now + once more at +200ms
 

@@ -16,6 +16,11 @@
              .header-collapsed rules in css/styles.css). -->
         <div id="header-title-area">
             <div class="app-title">URX Signal Path Visualizer<span class="app-version">v0.2.1</span></div>
+            <!-- Update chip. Hidden until the Electron main process reports an
+                 available (or downloaded) update through the preload bridge;
+                 in a plain browser there is no updater, so it never appears.
+                 Label and click action come from src/app/update-chip.ts. -->
+            <button type="button" id="update-chip" hidden></button>
         </div>
 
         <!-- Free space between the title and the control groups; the flow

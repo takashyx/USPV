@@ -284,6 +284,8 @@
     "Outline every control that has no device mapping in red (steady; DEV mode shows the same outlines while picking)": "\u30C7\u30D0\u30A4\u30B9\u30DE\u30C3\u30D4\u30F3\u30B0\u3092\u6301\u305F\u306A\u3044\u30B3\u30F3\u30C8\u30ED\u30FC\u30EB\u3092\u8D64\u67A0\u8868\u793A\u3059\u308B\uFF08\u70B9\u6EC5\u306A\u3057\u3002DEV\u30E2\u30FC\u30C9\u3067\u306F\u5BFE\u8C61\u9078\u629E\u4E2D\u306B\u540C\u3058\u8D64\u67A0\u304C\u51FA\u307E\u3059\uFF09",
     "Developer mode: red outlines on unmapped elements, Device Center log, click-to-capture for mapping research": "\u958B\u767A\u8005\u30E2\u30FC\u30C9: \u672A\u30DE\u30C3\u30D4\u30F3\u30B0\u8981\u7D20\u306E\u8D64\u67A0\u8868\u793A\u30FBDevice Center\u30ED\u30B0\u30FB\u30AF\u30EA\u30C3\u30AF\u3067\u30DE\u30C3\u30D4\u30F3\u30B0\u8ABF\u67FB\u30AD\u30E3\u30D7\u30C1\u30E3",
     "Show/hide the header controls": "\u30D8\u30C3\u30C0\u30FC\u306E\u30B3\u30F3\u30C8\u30ED\u30FC\u30EB\u3092\u8868\u793A/\u975E\u8868\u793A",
+    "A new version is available \u2014 click to open the download page": "\u65B0\u3057\u3044\u30D0\u30FC\u30B8\u30E7\u30F3\u304C\u3042\u308A\u307E\u3059 \u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u30C0\u30A6\u30F3\u30ED\u30FC\u30C9\u30DA\u30FC\u30B8\u3092\u958B\u304D\u307E\u3059",
+    "Update downloaded \u2014 click to restart and apply it now": "\u30A2\u30C3\u30D7\u30C7\u30FC\u30C8\u306E\u30C0\u30A6\u30F3\u30ED\u30FC\u30C9\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F \u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u518D\u8D77\u52D5\u3057\u3066\u9069\u7528\u3057\u307E\u3059",
     "Switch language": "\u8A00\u8A9E\u5207\u66FF",
     // Sections / nodes (UIBuilder templates, collapse buttons)
     "Collapse all nodes in this section": "\u30BB\u30AF\u30B7\u30E7\u30F3\u5185\u306E\u5168\u30CE\u30FC\u30C9\u3092\u6298\u308A\u305F\u305F\u307F\u8868\u793A\u306B\u3059\u308B",
@@ -3921,6 +3923,29 @@
     });
   }
 
+  // src/app/update-chip.ts
+  function initUpdateChip() {
+    const bridge = window.uspvUpdate;
+    if (!bridge) return;
+    const chip = document.getElementById("update-chip");
+    let current = null;
+    function render(info) {
+      current = info;
+      const ready = info.state === "downloaded";
+      chip.textContent = ready ? `Update v${info.version} ready` : `Update v${info.version}`;
+      chip.classList.toggle("ready", ready);
+      setTooltip(chip, ready ? "Update downloaded \u2014 click to restart and apply it now" : "A new version is available \u2014 click to open the download page");
+      chip.hidden = false;
+      adjustSectionPadding();
+    }
+    chip.addEventListener("click", () => {
+      if (!current) return;
+      if (current.state === "downloaded") bridge.restartAndInstall();
+      else bridge.openReleasesPage();
+    });
+    bridge.subscribe(render);
+  }
+
   // src/app/daw-toggle.ts
   var dawVisible = { "col-physical-inputs": true, "col-physical": true };
   var DAW_FADE_MS = 600;
@@ -5488,6 +5513,7 @@ meters 0:1</pre>
   initHeaderHamburger();
   initConfigButtons();
   initI18n();
+  initUpdateChip();
   initLayoutListeners();
   finalizeInitialLayout();
   initBroker();

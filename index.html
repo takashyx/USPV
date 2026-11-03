@@ -21,6 +21,30 @@
                  in a plain browser there is no updater, so it never appears.
                  Label and click action come from src/app/update-chip.ts. -->
             <button type="button" id="update-chip" hidden></button>
+            <!-- Routing-line legend. The samples use their own .legend-line
+                 classes (not .routing-line: that class carries the diagram's
+                 !important dash/opacity rules and the highlight pass strips
+                 .active from every .routing-line in the document) and share
+                 only the flow-dash keyframes. Always visible, also while the
+                 header is collapsed and while Hide Muted is on — it explains
+                 what the lines mean, it does not mirror their visibility.
+                 Tooltips are translated by src/app/i18n.ts (JA dictionary). -->
+            <div id="line-legend" aria-label="Routing line legend">
+                <span class="legend-item"
+                    title="Moving dashes: an enabled signal path (not a level meter). The color follows the source node.">
+                    <svg class="legend-swatch" viewBox="0 0 36 12" aria-hidden="true">
+                        <path class="legend-line legend-flow" d="M2 6 H34" />
+                    </svg>
+                    <span>FLOW</span>
+                </span>
+                <span class="legend-item"
+                    title="Still dark dashes: a path muted by a channel, send or level setting. Hidden in the diagram while Hide Muted is on.">
+                    <svg class="legend-swatch" viewBox="0 0 36 12" aria-hidden="true">
+                        <path class="legend-line legend-muted" d="M2 6 H34" />
+                    </svg>
+                    <span>MUTED</span>
+                </span>
+            </div>
         </div>
 
         <!-- Free space between the title and the control groups; the flow

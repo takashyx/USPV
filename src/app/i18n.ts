@@ -32,6 +32,11 @@ const JA: Record<string, string> = {
         '結線状態やパラメータの変化時にそのノードへ自動スクロール',
     'Hide muted connection lines':
         'ミュート中（muted）の結線を非表示にします',
+    // Routing-line legend beside the title (index.html #line-legend)
+    'Moving dashes: an enabled signal path (not a level meter). The color follows the source node.':
+        '動く破線: 有効な信号経路（音声レベルの表示ではありません）。色は送信元ノードに対応します',
+    'Still dark dashes: a path muted by a channel, send or level setting. Hidden in the diagram while Hide Muted is on.':
+        '静止した暗い破線: チャンネル・センド・レベル設定でミュートされた経路。Hide Muted が ON の間は図中では非表示になります',
     'In FOCUS VIEW, hide off-path nodes entirely (OFF dims them instead)':
         'FOCUS VIEW中、パス外のノードを非表示にする（OFFでは減光表示）',
     'In FOCUS VIEW, suppress wipe/blink effects for off-path changes (disconnections from and new connections to the path are still shown)':

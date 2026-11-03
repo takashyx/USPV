@@ -64,6 +64,7 @@ Want to try it without a device? Turn on the **Demo** toggle in the header (or o
 | `▲` on a node | Collapse the node to its title + a horizontal meter. `▼` restores it |
 | **Collapse All / Expand All** | Collapse or restore every node at once |
 | **Hide Muted** toggle | Show or hide muted (gray dashed) connection lines |
+| Line legend (next to the title) | **FLOW** = moving dashes, an enabled signal path (color follows the source node); **MUTED** = still gray dashes, a path muted by a channel, send or level setting. Hover for details |
 | Model selector | Switch between URX44V / URX44 / URX22 (selected automatically when a device is connected) |
 | `−` / `＋` | Adjust the overall font size (5 steps) |
 | **Export / Load** | Save the current settings (model, toggles, collapse states, ...) as a JSON file, or load one |
@@ -133,6 +134,7 @@ Device Center が起動していない (または実機が切断されている)
 | ノードの `▲` | ノードをタイトル + 横向きメーターだけに折りたたみ。`▼` で元に戻ります |
 | **Collapse All / Expand All** | 全ノードを一括で折りたたみ / 展開 |
 | **Hide Muted** トグル | ミュート中の結線 (灰色破線) の表示 / 非表示 |
+| 結線の凡例 (タイトル横) | **FLOW** = 動く破線、有効な信号経路 (色は送信元ノードに対応)。**MUTED** = 静止した灰色破線、チャンネル・センド・レベル設定でミュートされた経路。ホバーで説明を表示 |
 | モデルセレクタ | URX44V / URX44 / URX22 を切り替え (実機接続時は自動選択) |
 | `−` / `＋` | 全体の文字サイズを調整 (5段階) |
 | **Export / Load** | 現在の設定 (モデル・トグル・折りたたみ状態など) を JSON ファイルとして保存 / 読み込み |

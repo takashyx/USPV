@@ -96,6 +96,8 @@ header {
 
 #header-title-area {
     display: flex;
+    flex-wrap: wrap; /* the legend (and the update chip) drop below the title when it runs out of room */
+    row-gap: 4px;
     align-items: center;
     flex-shrink: 1;
     min-width: 0;
@@ -167,6 +169,64 @@ header {
 #update-chip.ready:hover {
     background: rgba(63, 185, 80, 0.24);
     box-shadow: 0 0 10px rgba(63, 185, 80, 0.35);
+}
+
+/* Routing-line legend beside the title / update chip (index.html). The
+   title area may wrap at narrow widths or large font levels: the legend
+   then moves to its own line, and its items wrap one by one — a swatch
+   never separates from its label. Sizes are in em so the samples follow
+   --font-boost with the labels. */
+#line-legend {
+    display: inline-flex;
+    flex-wrap: wrap;
+    flex-shrink: 0; /* never squeezed over the title: wraps to the next line instead */
+    align-items: center;
+    gap: 4px 12px;
+    margin-left: 12px;
+    font-size: calc(11px + var(--font-boost));
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: help;
+}
+
+.legend-swatch {
+    width: 3em;
+    height: 1em;
+    overflow: visible;
+    flex-shrink: 0;
+}
+
+/* Same dash pattern as the diagram lines (css: .routing-line.{flow,muted}-
+   line) minus their !important rules. The faint solid base underlay is
+   left out and the muted sample is drawn at the flow width: at header
+   scale the real 0.8px dashes over the underlay just read as a thin solid
+   line. The flow sample is achromatic on purpose: real line colors come
+   from the source node's category / CH color; muted lines are this gray. */
+.legend-line {
+    fill: none;
+    stroke-linecap: round;
+    stroke-width: 1.5;
+    stroke-dasharray: 5, 8;
+}
+
+.legend-flow {
+    stroke: var(--text-main);
+    opacity: 0.85;
+    animation: flow-dash 1.3s linear infinite;
+}
+
+.legend-muted {
+    stroke: var(--line-muted-stroke);
+    opacity: 0.9;
 }
 
 #header-chip-area {

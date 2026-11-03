@@ -116,6 +116,9 @@ export function scheduleCollapseRedraw(ms: number): void {
             requestAnimationFrame(tick);
         } else {
             collapseRedrawActive = false;
+            // The bodies captured at start may have been replaced by a
+            // model switch meanwhile — don't keep the old DOM alive
+            collapseScrollFrom.clear();
             adjustSectionPadding();
         }
     })();

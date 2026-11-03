@@ -11,7 +11,7 @@ import { EXTRA_METERS, METER_MAPPINGS, PARAM_MAPPINGS } from '../data/device-map
 import { demoState } from '../demo/demo';
 import { MODEL_IDS } from '../shared/constants';
 import { initializeSvgPaths, setLinesVisible, suppressChangeEffects } from '../view/render';
-import { handleMeterUpdate, handleParamUpdate, setInitialSyncDone } from './apply';
+import { handleMeterUpdate, handleParamUpdate, resetParamValueCache, setInitialSyncDone } from './apply';
 import { assignDynamicIds } from './dynamic-ids';
 import { trafficHooks } from './hooks';
 import { debouncedDrawLines, setSyncingInitial } from './redraw';
@@ -31,6 +31,19 @@ let ws: WebSocket | null = null;
 let devUid: string | null = null;
 let isConnected = false;
 let deviceModel = 'URX';
+// dev_uid whose subscriptions / initial fetch are in place — a repeated
+// `online` for the same device must not re-send the whole batch
+let syncedUid: string | null = null;
+// Timers of the current connection: the initial-sync blink gate and the
+// sync-flood redraw gate. Cleared on disconnect/reconnect so a dead
+// connection's timers can't release the gates of the one that replaced it.
+let initialSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let syncReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearConnectionTimers(): void {
+    if (initialSyncTimer) { clearTimeout(initialSyncTimer); initialSyncTimer = null; }
+    if (syncReleaseTimer) { clearTimeout(syncReleaseTimer); syncReleaseTimer = null; }
+}
 
 let connectBtn: HTMLElement;
 let statusDiv: HTMLElement;
@@ -68,10 +81,20 @@ function connect(): void {
     // Demo mode wins — never open a device connection under it (auto
     // -connect can fire while a restored demo session is running, §2.5)
     if (demoState.running) return;
-    if (ws) ws.close();
-    ws = new WebSocket('ws://127.0.0.1:51780/casket');
+    // A superseded socket is detached before it is closed: its late
+    // close/error events must not reset the state of the connection that
+    // replaced it, so every handler below checks that it still owns `ws`.
+    if (ws) {
+        const old = ws;
+        ws = null;
+        old.close();
+    }
+    clearConnectionTimers();
+    const sock = new WebSocket('ws://127.0.0.1:51780/casket');
+    ws = sock;
 
-    ws.onopen = () => {
+    sock.onopen = () => {
+        if (sock !== ws) return;
         // Demo mode may have started while the socket was CONNECTING —
         // drop the connection instead of clobbering the demo display
         if (demoState.running) { disconnect(); return; }
@@ -80,13 +103,15 @@ function connect(): void {
 
         // Set initial sync flag after 1.5s to prevent initial flood blinking
         setInitialSyncDone(false);
-        setTimeout(() => {
+        initialSyncTimer = setTimeout(() => {
+            initialSyncTimer = null;
             setInitialSyncDone(true);
         }, 1500);
         sendJson({ jsonrpc: '1.0', method: 'getDeviceList' });
     };
 
-    ws.onmessage = (event) => {
+    sock.onmessage = (event) => {
+        if (sock !== ws) return;
         try {
             const msg = JSON.parse(event.data);
             const hooks = trafficHooks();
@@ -97,13 +122,16 @@ function connect(): void {
         }
     };
 
-    ws.onerror = (err) => {
+    sock.onerror = (err) => {
+        if (sock !== ws) return;
         console.error('WebSocket connection error:', err);
         setDeviceStatus('Connection Error', 'var(--accent-red, #f85149)');
         disconnect();
     };
 
-    ws.onclose = () => {
+    sock.onclose = () => {
+        if (sock !== ws) return; // closed by disconnect()/connect(): already cleaned up
+        ws = null;
         disconnectCleanup();
     };
 }
@@ -113,7 +141,9 @@ function disconnect(): void {
         if (devUid && isConnected) {
             unsubscribeAll();
         }
-        ws.close();
+        const sock = ws;
+        ws = null; // detach first — its onclose must not clean up twice
+        sock.close();
     }
     disconnectCleanup();
 }
@@ -121,6 +151,10 @@ function disconnect(): void {
 function disconnectCleanup(): void {
     isConnected = false;
     devUid = null;
+    syncedUid = null;
+    clearConnectionTimers();
+    setSyncingInitial(false); // a disconnect inside the 400ms sync window must not leave redraws gated
+    resetParamValueCache();
     connectBtn.textContent = 'Connect';
     connectBtn.style.background = 'var(--accent-blue, #58a6ff)';
     // ws.onclose can arrive after demo mode has taken over the display —
@@ -149,8 +183,8 @@ function disconnectCleanup(): void {
     if (fwEl) fwEl.textContent = '--';
 
     // Subscriptions die with the connection — reflect that in dev mode
-    devSubs.parameters!.clear();
-    devSubs.meters!.clear();
+    // (every kind, including the free-form ones added from the SUBSCRIBE panel)
+    for (const set of Object.values(devSubs)) set.clear();
     notifySubsChanged();
 
     debouncedDrawLines();
@@ -159,6 +193,7 @@ function disconnectCleanup(): void {
 export function connectToDevice(uid: string, model: string): void {
     devUid = uid;
     deviceModel = model;
+    syncedUid = null; // the rebuilt DOM needs a fresh subscribe + initial fetch
     switchModel(model);
     requestVD('get', '/vd/synchronize');
 }
@@ -210,6 +245,7 @@ function handleDeviceList(list: any[]): void {
         select.value = deviceModel;
     }
 
+    syncedUid = null; // the rebuilt DOM needs a fresh subscribe + initial fetch
     switchModel(deviceModel);
 
     requestVD('get', '/vd/synchronize');
@@ -235,6 +271,12 @@ function handleSyncStatus(data: any): void {
         disconnect();
         return;
     }
+
+    // /vd/synchronize can be answered/notified again for a device that is
+    // already in sync — the subscribe + initial-fetch batch (~500 requests)
+    // must run once per device connection, not per `online`
+    if (isConnected && syncedUid === devUid) return;
+    syncedUid = devUid;
 
     isConnected = true;
     setSyncingInitial(true); // Start the sync gating block
@@ -265,7 +307,9 @@ function handleSyncStatus(data: any): void {
     requestVD('get', '/vd/device'); // firmware version for the header
 
     // Release sync block and draw lines after all initial state frames are processed
-    setTimeout(() => {
+    if (syncReleaseTimer) clearTimeout(syncReleaseTimer);
+    syncReleaseTimer = setTimeout(() => {
+        syncReleaseTimer = null;
         setSyncingInitial(false);
         debouncedDrawLines();
     }, 400);

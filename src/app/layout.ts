@@ -211,9 +211,11 @@ export function layoutSectionBody(
 // the value re-syncs on the next font/model change after expanding).
 export function sizeFixedColumns(): void {
     const root = document.documentElement;
+    const measured: HTMLElement[] = []; // columns whose width was derived in this pass
     ([['col-inputs', '--col-inputs-w'], ['col-fx', '--col-fx-w']] as const).forEach(([id, prop]) => {
         const col = document.getElementById(id);
         if (!col || col.classList.contains('all-collapsed')) return;
+        measured.push(col);
         root.style.setProperty(prop, 'max-content');
         const w = Math.ceil(col.getBoundingClientRect().width);
         root.style.setProperty(prop, w + 'px');
@@ -237,6 +239,7 @@ export function sizeFixedColumns(): void {
     ([['col-mix', '--col-mix-w'], ['col-stereo', '--col-stereo-w']] as const).forEach(([id, prop]) => {
         const col = document.getElementById(id);
         if (!col || col.classList.contains('all-collapsed')) return;
+        measured.push(col);
         const prevWidth = col.style.width;
         const prevFlex = col.style.flex;
         const prevMinWidth = col.style.minWidth;
@@ -255,6 +258,18 @@ export function sizeFixedColumns(): void {
         if (floor > 0) root.style.setProperty(prop, Math.ceil(floor) + 'px');
     });
     board.scrollLeft = prevScrollLeft;
+
+    // The widths above were derived from the value labels' CURRENT text —
+    // record that as each label's measured length, so setValueLabel asks
+    // for a re-measure exactly when a label outgrows what was measured
+    // (not some longer text from before an unrelated re-measure). Columns
+    // skipped above (all-collapsed) keep their labels unmeasured; they are
+    // measured when the column expands (collapse.ts).
+    measured.forEach(col => {
+        col.querySelectorAll<HTMLElement>('.knob-val, .fader-val').forEach(label => {
+            label.dataset.maxLen = String((label.textContent || '').length);
+        });
+    });
 }
 
 // Section headings can change height dynamically (font level, one-line
@@ -288,6 +303,30 @@ export function updateFade(body: HTMLElement): void {
     body.dataset.fadeBottom = (!atBottom).toString();
 }
 
+// Re-derive the fixed column widths (and redraw the lines), coalesced to
+// one re-measure per rendered frame. Fed by the column MutationObserver
+// below and by value labels that grow past their widest text (render.ts).
+let remeasureQueued = false;
+export function requestColumnRemeasure(): void {
+    if (remeasureQueued) return;
+    remeasureQueued = true;
+    requestAnimationFrame(() => {
+        remeasureQueued = false;
+        sizeFixedColumns();
+        debouncedDrawLines();
+    });
+}
+
+// Mutations inside the knob/fader value labels: every device notification
+// rewrites them, and sizeFixedColumns' max-content round trip per frame is
+// far too expensive for that. The labels report a width-relevant change
+// themselves (setValueLabel) instead.
+function isValueLabelMutation(record: MutationRecord): boolean {
+    const target = record.target;
+    const el = target instanceof Element ? target : target.parentElement;
+    return !!el && !!el.closest('.knob-val, .fader-val');
+}
+
 // Resize relayouts and scroll-driven line redraws are coalesced to one per
 // rendered frame — the events can fire faster than paint and a full
 // drawLines pass covers 222 connections.
@@ -311,21 +350,14 @@ export function initLayoutListeners(): void {
     // Attribute mutations (meter style updates every 150ms) are
     // deliberately not observed; sizeFixedColumns writes only to the
     // documentElement style, so re-measuring never re-triggers this.
-    let remeasureQueued = false;
-    const queueRemeasure = () => {
-        if (remeasureQueued) return;
-        remeasureQueued = true;
-        requestAnimationFrame(() => {
-            remeasureQueued = false;
-            sizeFixedColumns();
-            debouncedDrawLines();
-        });
-    };
+    // Value-label rewrites are filtered out (see isValueLabelMutation).
     ['col-inputs', 'col-fx', 'col-mix', 'col-stereo'].forEach(id => {
         const col = document.getElementById(id);
         if (col) {
-            new MutationObserver(queueRemeasure)
-                .observe(col, { childList: true, characterData: true, subtree: true });
+            new MutationObserver(records => {
+                if (records.every(isValueLabelMutation)) return;
+                requestColumnRemeasure();
+            }).observe(col, { childList: true, characterData: true, subtree: true });
         }
     });
 

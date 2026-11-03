@@ -58,19 +58,40 @@ export function initDevConsole(onObservedChanged: () => void): DevConsole {
 
     let logLines = 0;
 
-    function appendLog(dir: 'rx' | 'tx', text: string): void {
+    // Lines are built immediately (timestamp at arrival) but inserted once
+    // per frame as one fragment: a meter flood would otherwise force a
+    // layout per message (scrollHeight read + append).
+    let pendingLines: HTMLElement[] = [];
+    let flushQueued = false;
+
+    function flushLog(): void {
+        flushQueued = false;
+        if (pendingLines.length === 0) return;
         const nearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+        const frag = document.createDocumentFragment();
+        pendingLines.forEach(line => frag.appendChild(line));
+        pendingLines = [];
+        logEl.appendChild(frag);
+        while (logEl.childElementCount > MAX_LOG_LINES) logEl.firstElementChild!.remove();
+        logCountEl.textContent = `${logLines} msg`;
+        if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function appendLog(dir: 'rx' | 'tx', text: string): void {
         const d = new Date();
         const stamp = d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
         const line = document.createElement('div');
         line.className = `dev-log-line ${dir}`;
         line.innerHTML = `<span class="t">${stamp}</span><span class="dir">${dir.toUpperCase()}</span>`;
         line.appendChild(document.createTextNode(text));
-        logEl.appendChild(line);
+        pendingLines.push(line);
         logLines++;
-        while (logEl.childElementCount > MAX_LOG_LINES) logEl.firstElementChild!.remove();
-        logCountEl.textContent = `${logLines} msg`;
-        if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
+        // only the newest MAX_LOG_LINES can survive the flush anyway
+        if (pendingLines.length > MAX_LOG_LINES) pendingLines.splice(0, pendingLines.length - MAX_LOG_LINES);
+        if (!flushQueued) {
+            flushQueued = true;
+            requestAnimationFrame(flushLog);
+        }
     }
 
     // ---------------------------------------------------------------
@@ -167,6 +188,7 @@ export function initDevConsole(onObservedChanged: () => void): DevConsole {
     // ---------------------------------------------------------------
 
     document.getElementById('dev-log-clear')!.addEventListener('click', () => {
+        pendingLines = [];
         logEl.innerHTML = '';
         logLines = 0;
         logCountEl.textContent = '';

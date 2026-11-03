@@ -11,6 +11,7 @@
 import { ConfigStore } from '../config/config-store';
 import { EVENT_MODEL_SWITCHED } from '../shared/constants';
 import { setTooltip } from './i18n';
+import { sizeFixedColumns } from './layout';
 import {
     animateColumnWidths,
     cancelColumnWidthAnim,
@@ -47,6 +48,21 @@ function updateAllCollapsedClasses(): void {
     });
 }
 
+// Final-state hook of both applyCollapseState paths: runs with the final
+// node classes applied and the width-animation pins released (the
+// non-animated path / animateColumnWidths' measuring pass).
+//
+// Expanding a node re-measures the fixed columns synchronously: value
+// labels inside a collapsed node (or an all-collapsed column) contribute
+// no width while hidden, yet their text keeps changing with the device —
+// and those changes no longer trigger a measure on their own (layout.ts
+// isValueLabelMutation). A deferred measure would read the pinned
+// mid-animation widths instead of the natural ones.
+function applyFinalCollapseClasses(changes: HeightChange[]): void {
+    updateAllCollapsedClasses();
+    if (changes.some(c => !c.on)) sizeFixedColumns();
+}
+
 // Sync everything from collapseNodes. Animated toggles run the width
 // and height adjustments TOGETHER (REQUIREMENTS.md §2.1.4): the column
 // widths are pinned and start transitioning toward their pre-measured
@@ -73,7 +89,7 @@ export function applyCollapseState(animate: boolean): void {
             c.node.style.height = '';
             c.node.classList.toggle('collapse', c.on);
         });
-        updateAllCollapsedClasses();
+        applyFinalCollapseClasses(changes);
         scheduleCollapseRedraw(0);
         return;
     }
@@ -85,7 +101,7 @@ export function applyCollapseState(animate: boolean): void {
     animateColumnWidths(
         () => {
             changes.forEach(c => c.node.classList.toggle('collapse', c.on));
-            updateAllCollapsedClasses();
+            applyFinalCollapseClasses(changes);
         },
         () => {
             changes.forEach(c => c.node.classList.toggle('collapse', !c.on));

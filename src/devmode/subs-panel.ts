@@ -28,6 +28,9 @@ export function expandAddrRange(kind: string, text: string): string[] | null {
         if (!m) return null;
         const from = Number(m[1]);
         const to = m[2] !== undefined ? Number(m[2]) : from;
+        // Beyond 2^53 `v++` no longer advances and the expansion loop below
+        // would never end — such addresses are not valid anyway
+        if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to)) return null;
         if (to < from) return null;
         ranges.push([from, to]);
     }
@@ -39,6 +42,7 @@ export function expandAddrRange(kind: string, text: string): string[] | null {
         for (const prefix of keys) {
             for (let v = from; v <= to; v++) {
                 next.push(i === 0 ? String(v) : `${prefix}:${v}`);
+                if (next.length > MAX_BULK_SUBS) return null; // hard stop, whatever the arithmetic said
             }
         }
         keys = next;

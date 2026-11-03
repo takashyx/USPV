@@ -51,6 +51,27 @@ export function setInitialSyncDone(v: boolean): void {
     initialSyncDone = v;
 }
 
+// Last notification applied per element (address + raw value). A
+// notification that repeats what the element already shows (device echo
+// of our own set, a re-fetch) still updates the DOM but must not blink /
+// Scroll to Change again — each blink forces a synchronous layout, and
+// fader drags deliver many notifications a second. Keyed by element, not
+// by address: alias addresses (e.g. an EQ ON and its inverted SSMCS twin)
+// drive the same control, so the same value on another address IS a change.
+const lastApplied = new Map<string, { addr: string; value: unknown }>();
+
+export function resetParamValueCache(): void {
+    lastApplied.clear();
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+        return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return false;
+}
+
 // PREAMP gain knobs share one applier; only the analog/digital scale differs
 function applyGainKnob(el: HTMLElement, value: number, isAnalog: boolean): void {
     updateKnobElement(el, vdToGainAngle(value, isAnalog), formatDb(value / 100));
@@ -70,6 +91,10 @@ const PARAM_APPLIERS: Record<Exclude<ParamType, 'portRef'>, ParamApplier> = {
         const { db, text } = decodeLevelKnob(value);
         updateKnobElement(el, dbToKnobAngle(db), text);
         el.dataset.value = String(db); // Store for isFaderMuted
+        // The level drives the connection state (muted at the -60 dB
+        // floor) — redraw explicitly, the value-label text change alone
+        // no longer triggers one (see layout.ts isValueLabelMutation)
+        debouncedDrawLines();
     },
     phonesLevel: (el, value) => {
         const pct = Math.max(0, Math.min(1, value / 100));
@@ -167,8 +192,12 @@ export function handleParamUpdate(addr: string, value: any): void {
         const el = document.getElementById(match.elId);
         if (!el) continue;
 
+        const prev = lastApplied.get(match.elId);
+        const changed = !prev || prev.addr !== addr || !sameValue(prev.value, value);
+        lastApplied.set(match.elId, { addr, value });
+
         const node = el.closest('.node');
-        if (node && initialSyncDone) blinkAndScrollToNode(node);
+        if (node && initialSyncDone && changed) blinkAndScrollToNode(node);
 
         if (match.type !== 'portRef') PARAM_APPLIERS[match.type](el, value, match);
     }

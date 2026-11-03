@@ -738,7 +738,15 @@
     });
     updatePatchChips();
   }
-  var settleRedrawPending = false;
+  var settleRedraws = /* @__PURE__ */ new Map();
+  function scheduleSettleRedraw(delayMs) {
+    const due = Math.ceil((Date.now() + delayMs) / 50) * 50;
+    if (settleRedraws.has(due)) return;
+    settleRedraws.set(due, setTimeout(() => {
+      settleRedraws.delete(due);
+      drawLines();
+    }, Math.max(0, due - Date.now())));
+  }
   function evaluateConnections() {
     const blinkNodes = /* @__PURE__ */ new Set();
     const newTransitions = [];
@@ -820,12 +828,8 @@
         }
       });
     }
-    if (!settleRedrawPending && evaluated.some((item) => item.inTransition)) {
-      settleRedrawPending = true;
-      setTimeout(() => {
-        settleRedrawPending = false;
-        drawLines();
-      }, TRANSITION_WINDOW_MS + 5);
+    if (settleRedraws.size === 0 && evaluated.some((item) => item.inTransition)) {
+      scheduleSettleRedraw(TRANSITION_WINDOW_MS + 5);
     }
     return evaluated;
   }
@@ -1037,7 +1041,7 @@
           transition.until = Date.now() + TRANSITION_WINDOW_MS;
           transition.nodes.forEach(triggerNodeBlink);
           startWipe(transition, basePath, flowPath, mutedPath);
-          setTimeout(drawLines, TRANSITION_WINDOW_MS + 50);
+          scheduleSettleRedraw(TRANSITION_WINDOW_MS + 50);
         };
         if (transition.effectsReady || transition.startDelay > 0) {
           prepareDeferredWipe(transition, basePath, flowPath, mutedPath);
@@ -1074,6 +1078,11 @@
   function setValueLabel(valEl, text) {
     valEl.textContent = text;
     valEl.style.color = text.includes("-inf") ? "var(--accent-red)" : "var(--accent-green)";
+    const maxLen = Number(valEl.dataset.maxLen) || 0;
+    if (text.length > maxLen) {
+      valEl.dataset.maxLen = String(text.length);
+      requestColumnRemeasure();
+    }
   }
   function updateKnobElement(knobEl, angle, text) {
     knobEl.style.transform = `rotate(${angle}deg)`;
@@ -1104,33 +1113,49 @@
       }
     }
   }
+  var nodeBlinkTimers = /* @__PURE__ */ new WeakMap();
+  var nodeBlinkStarted = /* @__PURE__ */ new WeakMap();
   function triggerNodeBlink(nodeId) {
     const nodeEl = document.getElementById(nodeId);
-    if (nodeEl) {
+    if (!nodeEl) return;
+    const now = performance.now();
+    const started = nodeBlinkStarted.get(nodeEl);
+    if (started !== void 0 && now - started < 16) return;
+    nodeBlinkStarted.set(nodeEl, now);
+    const pending = nodeBlinkTimers.get(nodeEl);
+    if (pending) clearTimeout(pending);
+    nodeEl.classList.remove("node-blink");
+    void nodeEl.offsetWidth;
+    nodeEl.classList.add("node-blink");
+    nodeBlinkTimers.set(nodeEl, setTimeout(() => {
+      nodeBlinkTimers.delete(nodeEl);
       nodeEl.classList.remove("node-blink");
-      void nodeEl.offsetWidth;
-      nodeEl.classList.add("node-blink");
-      setTimeout(() => {
-        nodeEl.classList.remove("node-blink");
-      }, 1050);
-    }
+    }, 1050));
   }
 
   // src/broker/redraw.ts
+  var DEBOUNCE_MS = 50;
+  var MAX_WAIT_MS = 200;
   var isSyncingInitial = false;
   var drawLinesTimeout = null;
+  var pendingSince = 0;
   function setSyncingInitial(v) {
     isSyncingInitial = v;
   }
+  function flushDrawLines() {
+    drawLinesTimeout = null;
+    drawLines();
+  }
   function debouncedDrawLines() {
     if (isSyncingInitial) return;
+    const now = Date.now();
     if (drawLinesTimeout) {
       clearTimeout(drawLinesTimeout);
+    } else {
+      pendingSince = now;
     }
-    drawLinesTimeout = setTimeout(() => {
-      drawLines();
-      drawLinesTimeout = null;
-    }, 50);
+    const remaining = Math.max(0, pendingSince + MAX_WAIT_MS - now);
+    drawLinesTimeout = setTimeout(flushDrawLines, Math.min(DEBOUNCE_MS, remaining));
   }
 
   // src/app/layout.ts
@@ -1262,9 +1287,11 @@
   }
   function sizeFixedColumns() {
     const root = document.documentElement;
+    const measured = [];
     [["col-inputs", "--col-inputs-w"], ["col-fx", "--col-fx-w"]].forEach(([id, prop]) => {
       const col = document.getElementById(id);
       if (!col || col.classList.contains("all-collapsed")) return;
+      measured.push(col);
       root.style.setProperty(prop, "max-content");
       const w = Math.ceil(col.getBoundingClientRect().width);
       root.style.setProperty(prop, w + "px");
@@ -1274,6 +1301,7 @@
     [["col-mix", "--col-mix-w"], ["col-stereo", "--col-stereo-w"]].forEach(([id, prop]) => {
       const col = document.getElementById(id);
       if (!col || col.classList.contains("all-collapsed")) return;
+      measured.push(col);
       const prevWidth = col.style.width;
       const prevFlex = col.style.flex;
       const prevMinWidth = col.style.minWidth;
@@ -1292,6 +1320,11 @@
       if (floor > 0) root.style.setProperty(prop, Math.ceil(floor) + "px");
     });
     board.scrollLeft = prevScrollLeft;
+    measured.forEach((col) => {
+      col.querySelectorAll(".knob-val, .fader-val").forEach((label) => {
+        label.dataset.maxLen = String((label.textContent || "").length);
+      });
+    });
   }
   function equalizeSectionHeadings() {
     const h2s = Array.from(document.querySelectorAll(".section > h2"));
@@ -1320,6 +1353,21 @@
     body.dataset.fadeTop = (!atTop).toString();
     body.dataset.fadeBottom = (!atBottom).toString();
   }
+  var remeasureQueued = false;
+  function requestColumnRemeasure() {
+    if (remeasureQueued) return;
+    remeasureQueued = true;
+    requestAnimationFrame(() => {
+      remeasureQueued = false;
+      sizeFixedColumns();
+      debouncedDrawLines();
+    });
+  }
+  function isValueLabelMutation(record) {
+    const target = record.target;
+    const el = target instanceof Element ? target : target.parentElement;
+    return !!el && !!el.closest(".knob-val, .fader-val");
+  }
   function initLayoutListeners() {
     let resizeLayoutQueued = false;
     window.addEventListener("resize", () => {
@@ -1331,20 +1379,13 @@
         });
       }
     });
-    let remeasureQueued = false;
-    const queueRemeasure = () => {
-      if (remeasureQueued) return;
-      remeasureQueued = true;
-      requestAnimationFrame(() => {
-        remeasureQueued = false;
-        sizeFixedColumns();
-        debouncedDrawLines();
-      });
-    };
     ["col-inputs", "col-fx", "col-mix", "col-stereo"].forEach((id) => {
       const col = document.getElementById(id);
       if (col) {
-        new MutationObserver(queueRemeasure).observe(col, { childList: true, characterData: true, subtree: true });
+        new MutationObserver((records) => {
+          if (records.every(isValueLabelMutation)) return;
+          requestColumnRemeasure();
+        }).observe(col, { childList: true, characterData: true, subtree: true });
       }
     });
     let scrollDrawQueued = false;
@@ -2585,6 +2626,17 @@
   function setInitialSyncDone(v) {
     initialSyncDone = v;
   }
+  var lastApplied = /* @__PURE__ */ new Map();
+  function resetParamValueCache() {
+    lastApplied.clear();
+  }
+  function sameValue(a, b) {
+    if (a === b) return true;
+    if (typeof a === "object" && a !== null && typeof b === "object" && b !== null) {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return false;
+  }
   function applyGainKnob(el, value, isAnalog) {
     updateKnobElement(el, vdToGainAngle(value, isAnalog), formatDb(value / 100));
   }
@@ -2597,6 +2649,7 @@
       const { db, text } = decodeLevelKnob(value);
       updateKnobElement(el, dbToKnobAngle(db), text);
       el.dataset.value = String(db);
+      debouncedDrawLines();
     },
     phonesLevel: (el, value) => {
       const pct = Math.max(0, Math.min(1, value / 100));
@@ -2677,8 +2730,11 @@
       if (match.type === "portRef") applyPortRef(match, value);
       const el = document.getElementById(match.elId);
       if (!el) continue;
+      const prev = lastApplied.get(match.elId);
+      const changed = !prev || prev.addr !== addr || !sameValue(prev.value, value);
+      lastApplied.set(match.elId, { addr, value });
       const node = el.closest(".node");
-      if (node && initialSyncDone) blinkAndScrollToNode(node);
+      if (node && initialSyncDone && changed) blinkAndScrollToNode(node);
       if (match.type !== "portRef") PARAM_APPLIERS[match.type](el, value, match);
     }
   }
@@ -2921,6 +2977,19 @@
   var devUid = null;
   var isConnected = false;
   var deviceModel = "URX";
+  var syncedUid = null;
+  var initialSyncTimer = null;
+  var syncReleaseTimer = null;
+  function clearConnectionTimers() {
+    if (initialSyncTimer) {
+      clearTimeout(initialSyncTimer);
+      initialSyncTimer = null;
+    }
+    if (syncReleaseTimer) {
+      clearTimeout(syncReleaseTimer);
+      syncReleaseTimer = null;
+    }
+  }
   var connectBtn;
   var statusDiv;
   var statusDot;
@@ -2940,9 +3009,16 @@
   }
   function connect() {
     if (demoState.running) return;
-    if (ws) ws.close();
-    ws = new WebSocket("ws://127.0.0.1:51780/casket");
-    ws.onopen = () => {
+    if (ws) {
+      const old = ws;
+      ws = null;
+      old.close();
+    }
+    clearConnectionTimers();
+    const sock = new WebSocket("ws://127.0.0.1:51780/casket");
+    ws = sock;
+    sock.onopen = () => {
+      if (sock !== ws) return;
       if (demoState.running) {
         disconnect();
         return;
@@ -2950,12 +3026,14 @@
       console.log("[Device Center] Connected");
       setSyncStatus("Device Connected", "var(--accent-green)");
       setInitialSyncDone(false);
-      setTimeout(() => {
+      initialSyncTimer = setTimeout(() => {
+        initialSyncTimer = null;
         setInitialSyncDone(true);
       }, 1500);
       sendJson({ jsonrpc: "1.0", method: "getDeviceList" });
     };
-    ws.onmessage = (event) => {
+    sock.onmessage = (event) => {
+      if (sock !== ws) return;
       try {
         const msg = JSON.parse(event.data);
         const hooks2 = trafficHooks();
@@ -2965,12 +3043,15 @@
         console.error("Error parsing WS frame:", err);
       }
     };
-    ws.onerror = (err) => {
+    sock.onerror = (err) => {
+      if (sock !== ws) return;
       console.error("WebSocket connection error:", err);
       setDeviceStatus("Connection Error", "var(--accent-red, #f85149)");
       disconnect();
     };
-    ws.onclose = () => {
+    sock.onclose = () => {
+      if (sock !== ws) return;
+      ws = null;
       disconnectCleanup();
     };
   }
@@ -2979,13 +3060,19 @@
       if (devUid && isConnected) {
         unsubscribeAll();
       }
-      ws.close();
+      const sock = ws;
+      ws = null;
+      sock.close();
     }
     disconnectCleanup();
   }
   function disconnectCleanup() {
     isConnected = false;
     devUid = null;
+    syncedUid = null;
+    clearConnectionTimers();
+    setSyncingInitial(false);
+    resetParamValueCache();
     connectBtn.textContent = "Connect";
     connectBtn.style.background = "var(--accent-blue, #58a6ff)";
     if (!demoState.running) {
@@ -3005,14 +3092,14 @@
     if (rateEl) rateEl.textContent = "--";
     const fwEl = document.getElementById("firmware-version");
     if (fwEl) fwEl.textContent = "--";
-    devSubs.parameters.clear();
-    devSubs.meters.clear();
+    for (const set of Object.values(devSubs)) set.clear();
     notifySubsChanged();
     debouncedDrawLines();
   }
   function connectToDevice(uid, model) {
     devUid = uid;
     deviceModel = model;
+    syncedUid = null;
     switchModel(model);
     requestVD("get", "/vd/synchronize");
   }
@@ -3052,6 +3139,7 @@
     if (select) {
       select.value = deviceModel;
     }
+    syncedUid = null;
     switchModel(deviceModel);
     requestVD("get", "/vd/synchronize");
   }
@@ -3068,6 +3156,8 @@
       disconnect();
       return;
     }
+    if (isConnected && syncedUid === devUid) return;
+    syncedUid = devUid;
     isConnected = true;
     setSyncingInitial(true);
     suppressChangeEffects(2e3);
@@ -3102,7 +3192,9 @@
     subscribeAll();
     fetchInitialState();
     requestVD("get", "/vd/device");
-    setTimeout(() => {
+    if (syncReleaseTimer) clearTimeout(syncReleaseTimer);
+    syncReleaseTimer = setTimeout(() => {
+      syncReleaseTimer = null;
       setSyncingInitial(false);
       debouncedDrawLines();
     }, 400);
@@ -3405,6 +3497,9 @@
   function refreshChips() {
     Object.keys(NODE_METER_TAPS).forEach(updateChip);
   }
+  function tapAddrs(tap) {
+    return [tap.l, tap.r].filter((a) => !!a).map(([id, x]) => `${id}:${x}`);
+  }
   function cycleMeterTap(nodeId) {
     const taps = NODE_METER_TAPS[nodeId];
     if (!taps || taps.length < 2) return;
@@ -3418,8 +3513,15 @@
     [`${nodeId}-meter`, `${nodeId}-meter-r`].forEach((id) => {
       document.getElementById(id)?.style.setProperty("--level", "0%");
     });
-    const addrs = [next.l, next.r].filter((a) => !!a).map(([id, x]) => `${id}:${x}`);
-    deviceSync.subscribe("meters", addrs, true);
+    const nextAddrs = tapAddrs(next);
+    const stillNeeded = /* @__PURE__ */ new Set([
+      ...Object.values(METER_MAPPINGS).map((m) => `${m.meterId}:${m.x}`),
+      // every node's current tap
+      ...EXTRA_METERS
+    ]);
+    const stale = tapAddrs(cur).filter((a) => !stillNeeded.has(a) && !nextAddrs.includes(a));
+    if (stale.length) deviceSync.subscribe("meters", stale, false);
+    deviceSync.subscribe("meters", nextAddrs, true);
     sizeFixedColumns();
   }
   function initMeterTaps() {
@@ -3500,6 +3602,7 @@
         requestAnimationFrame(tick);
       } else {
         collapseRedrawActive = false;
+        collapseScrollFrom.clear();
         adjustSectionPadding();
       }
     })();
@@ -3622,6 +3725,10 @@
       section.classList.toggle("all-collapsed", all);
     });
   }
+  function applyFinalCollapseClasses(changes) {
+    updateAllCollapsedClasses();
+    if (changes.some((c) => !c.on)) sizeFixedColumns();
+  }
   function applyCollapseState(animate) {
     ConfigStore.set("collapsedNodes", [...collapseNodes]);
     const changes = [];
@@ -3638,14 +3745,14 @@
         c.node.style.height = "";
         c.node.classList.toggle("collapse", c.on);
       });
-      updateAllCollapsedClasses();
+      applyFinalCollapseClasses(changes);
       scheduleCollapseRedraw(0);
       return;
     }
     animateColumnWidths(
       () => {
         changes.forEach((c) => c.node.classList.toggle("collapse", c.on));
-        updateAllCollapsedClasses();
+        applyFinalCollapseClasses(changes);
       },
       () => {
         changes.forEach((c) => c.node.classList.toggle("collapse", !c.on));
@@ -4242,7 +4349,16 @@
       }
       rec.count++;
       if (rec.values.length < MAX_VALUES_PER_ADDR) rec.values.push(p.value);
-      render();
+      queueRender();
+    }
+    let renderQueued = false;
+    function queueRender() {
+      if (renderQueued) return;
+      renderQueued = true;
+      setTimeout(() => {
+        renderQueued = false;
+        render();
+      }, 150);
     }
     function finish() {
       if (!current) return;
@@ -4466,19 +4582,34 @@
     const logEl = document.getElementById("dev-log");
     const logCountEl = document.getElementById("dev-log-count");
     let logLines = 0;
-    function appendLog(dir, text) {
+    let pendingLines = [];
+    let flushQueued = false;
+    function flushLog() {
+      flushQueued = false;
+      if (pendingLines.length === 0) return;
       const nearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+      const frag = document.createDocumentFragment();
+      pendingLines.forEach((line) => frag.appendChild(line));
+      pendingLines = [];
+      logEl.appendChild(frag);
+      while (logEl.childElementCount > MAX_LOG_LINES) logEl.firstElementChild.remove();
+      logCountEl.textContent = `${logLines} msg`;
+      if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
+    }
+    function appendLog(dir, text) {
       const d = /* @__PURE__ */ new Date();
       const stamp = d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0");
       const line = document.createElement("div");
       line.className = `dev-log-line ${dir}`;
       line.innerHTML = `<span class="t">${stamp}</span><span class="dir">${dir.toUpperCase()}</span>`;
       line.appendChild(document.createTextNode(text));
-      logEl.appendChild(line);
+      pendingLines.push(line);
       logLines++;
-      while (logEl.childElementCount > MAX_LOG_LINES) logEl.firstElementChild.remove();
-      logCountEl.textContent = `${logLines} msg`;
-      if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
+      if (pendingLines.length > MAX_LOG_LINES) pendingLines.splice(0, pendingLines.length - MAX_LOG_LINES);
+      if (!flushQueued) {
+        flushQueued = true;
+        requestAnimationFrame(flushLog);
+      }
     }
     const wireLogToggle = (trackId, toggleId, key, defaultOn, apply) => {
       let on = defaultOn ? ConfigStore.get(key) !== false : ConfigStore.get(key) === true;
@@ -4564,6 +4695,7 @@
       ];
     }
     document.getElementById("dev-log-clear").addEventListener("click", () => {
+      pendingLines = [];
       logEl.innerHTML = "";
       logLines = 0;
       logCountEl.textContent = "";
@@ -5025,6 +5157,7 @@ meters 0:1</pre>
       if (!m) return null;
       const from = Number(m[1]);
       const to = m[2] !== void 0 ? Number(m[2]) : from;
+      if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to)) return null;
       if (to < from) return null;
       ranges.push([from, to]);
     }
@@ -5036,6 +5169,7 @@ meters 0:1</pre>
       for (const prefix of keys) {
         for (let v = from; v <= to; v++) {
           next.push(i === 0 ? String(v) : `${prefix}:${v}`);
+          if (next.length > MAX_BULK_SUBS) return null;
         }
       }
       keys = next;

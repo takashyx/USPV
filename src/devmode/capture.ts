@@ -84,7 +84,20 @@ export function initCaptureMode(deps: CaptureModeDeps): CaptureMode {
         }
         rec.count++;
         if (rec.values.length < MAX_VALUES_PER_ADDR) rec.values.push(p.value);
-        render();
+        queueRender();
+    }
+
+    // Notifications arrive in bursts (fader drags, meter floods): the full
+    // re-render (target card, address rows, finished-captures list and all
+    // three reports) runs at most a few times a second while capturing
+    let renderQueued = false;
+    function queueRender(): void {
+        if (renderQueued) return;
+        renderQueued = true;
+        setTimeout(() => {
+            renderQueued = false;
+            render();
+        }, 150);
     }
 
     function finish(): void {

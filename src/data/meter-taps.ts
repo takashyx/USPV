@@ -9,7 +9,7 @@ import { setTooltip } from '../app/i18n';
 import { sizeFixedColumns } from '../app/layout';
 import { deviceSync } from '../broker/socket';
 import { ConfigStore } from '../config/config-store';
-import { METER_MAPPINGS, rebuildReverseMeterMap } from './device-map';
+import { EXTRA_METERS, METER_MAPPINGS, rebuildReverseMeterMap } from './device-map';
 import { EVENT_MODEL_SWITCHED } from '../shared/constants';
 
 export interface MeterTapDef {
@@ -123,10 +123,19 @@ function refreshChips(): void {
     Object.keys(NODE_METER_TAPS).forEach(updateChip);
 }
 
+// Meter addresses of a tap, in the "{meterId}:{x}" subscription form
+function tapAddrs(tap: MeterTapDef): string[] {
+    return [tap.l, tap.r]
+        .filter((a): a is readonly [number, number] => !!a)
+        .map(([id, x]) => `${id}:${x}`);
+}
+
 /** Cycle a node's meter to its next tap point (no-op for single-tap
  *  nodes). Persists, remaps, resets the bars and — while connected —
- *  subscribes the new addresses (the old ones stay subscribed; duplicate
- *  registrations are harmless). */
+ *  subscribes the new addresses and unregisters the previous tap's, unless
+ *  another node's tap or the always-on set (EXTRA_METERS: USB-follow /
+ *  direct taps) still needs them. Without that, cycling through the taps
+ *  would leave every visited address subscribed and notifying. */
 export function cycleMeterTap(nodeId: string): void {
     const taps = NODE_METER_TAPS[nodeId];
     if (!taps || taps.length < 2) return;
@@ -146,9 +155,14 @@ export function cycleMeterTap(nodeId: string): void {
 
     // Live re-subscribe (returns false while disconnected — the initial
     // subscribeAll after connect walks the updated METER_MAPPINGS anyway)
-    const addrs = [next.l, next.r].filter((a): a is readonly [number, number] => !!a)
-        .map(([id, x]) => `${id}:${x}`);
-    deviceSync.subscribe('meters', addrs, true);
+    const nextAddrs = tapAddrs(next);
+    const stillNeeded = new Set<string>([
+        ...Object.values(METER_MAPPINGS).map(m => `${m.meterId}:${m.x}`), // every node's current tap
+        ...EXTRA_METERS,
+    ]);
+    const stale = tapAddrs(cur).filter(a => !stillNeeded.has(a) && !nextAddrs.includes(a));
+    if (stale.length) deviceSync.subscribe('meters', stale, false);
+    deviceSync.subscribe('meters', nextAddrs, true);
 
     // A longer/shorter chip label can nudge the node's natural width —
     // re-derive the fixed columns so nothing overhangs the scrollbar

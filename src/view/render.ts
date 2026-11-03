@@ -7,7 +7,7 @@
 
 import type { Connection, ConnectionState } from '../shared/types';
 import { appState } from '../app/app-state';
-import { scrollToNodes } from '../app/layout';
+import { requestColumnRemeasure, scrollToNodes } from '../app/layout';
 import { debouncedDrawLines } from '../broker/redraw';
 import { connections, currentPatches } from '../data/topology';
 import { cssColor, effectiveNodeColor } from './categories';
@@ -197,10 +197,23 @@ interface EvaluatedConn {
     connKey: string;
 }
 
+// Settle redraws after transition windows: timers are keyed on their due
+// time (50 ms buckets), so N lines changing in one pass share a single
+// drawLines instead of each arming its own full pass.
+const settleRedraws = new Map<number, ReturnType<typeof setTimeout>>();
+
+function scheduleSettleRedraw(delayMs: number): void {
+    const due = Math.ceil((Date.now() + delayMs) / 50) * 50;
+    if (settleRedraws.has(due)) return;
+    settleRedraws.set(due, setTimeout(() => {
+        settleRedraws.delete(due);
+        drawLines();
+    }, Math.max(0, due - Date.now())));
+}
+
 // Evaluates every connection's current state, arms the transition window on
 // state changes (wipe animation + blinking both end nodes), and updates the
 // state history.
-let settleRedrawPending = false;
 
 function evaluateConnections(): EvaluatedConn[] {
     const blinkNodes = new Set<string>();
@@ -312,13 +325,11 @@ function evaluateConnections(): EvaluatedConn[] {
     // Change and, on repatches, after the disconnect phase for connect wipes.
 
     // One settle redraw just after the transition window expires (re-scheduled
-    // by that redraw itself if some lines are still mid-transition then)
-    if (!settleRedrawPending && evaluated.some(item => item.inTransition)) {
-        settleRedrawPending = true;
-        setTimeout(() => {
-            settleRedrawPending = false;
-            drawLines();
-        }, TRANSITION_WINDOW_MS + 5);
+    // by that redraw itself if some lines are still mid-transition then). Any
+    // pending settle timer re-checks the same way, so none is added while
+    // one is queued — scroll-driven passes during a window must not stack up.
+    if (settleRedraws.size === 0 && evaluated.some(item => item.inTransition)) {
+        scheduleSettleRedraw(TRANSITION_WINDOW_MS + 5);
     }
 
     return evaluated;
@@ -646,9 +657,9 @@ export function drawLines(): void {
                 startWipe(transition, basePath, flowPath, mutedPath);
                 // The pass-level settle timer was armed when the change was
                 // detected; a wipe deferred by a scroll or a paired
-                // disconnect outlives it, so schedule this transition's own
-                // settle redraw right after its window expires
-                setTimeout(drawLines, TRANSITION_WINDOW_MS + 50);
+                // disconnect outlives it, so make sure a settle redraw runs
+                // right after this window expires (shared per due time)
+                scheduleSettleRedraw(TRANSITION_WINDOW_MS + 50);
             };
 
             if (transition.effectsReady || transition.startDelay > 0) {
@@ -701,6 +712,16 @@ export function dbToKnobAngle(db: number): number {
 export function setValueLabel(valEl: HTMLElement, text: string): void {
     valEl.textContent = text;
     valEl.style.color = text.includes('-inf') ? 'var(--accent-red)' : 'var(--accent-green)';
+    // Value labels are excluded from the column-width MutationObserver
+    // (layout.ts) — they change on every notification. Only a label
+    // growing past the text the fixed columns were last measured with
+    // (data-max-len, synced by sizeFixedColumns) can widen the node, so
+    // the columns are re-measured just then (coalesced per frame).
+    const maxLen = Number(valEl.dataset.maxLen) || 0;
+    if (text.length > maxLen) {
+        valEl.dataset.maxLen = String(text.length);
+        requestColumnRemeasure();
+    }
 }
 
 // Rotates a knob and (when given) updates its sibling .knob-val label —
@@ -744,14 +765,28 @@ export function updateToggleElement(el: HTMLElement, isActive: boolean): void {
     }
 }
 
+// Per-node blink bookkeeping: the pending class-removal timer (replaced on
+// restart, so an older blink can't cut a newer one short) and the start
+// time (several transitions sharing an endpoint in one pass blink it once —
+// each restart forces a synchronous layout).
+const nodeBlinkTimers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+const nodeBlinkStarted = new WeakMap<Element, number>();
+
 export function triggerNodeBlink(nodeId: string): void {
     const nodeEl = document.getElementById(nodeId);
-    if (nodeEl) {
+    if (!nodeEl) return;
+    const now = performance.now();
+    const started = nodeBlinkStarted.get(nodeEl);
+    if (started !== undefined && now - started < 16) return; // same frame
+    nodeBlinkStarted.set(nodeEl, now);
+
+    const pending = nodeBlinkTimers.get(nodeEl);
+    if (pending) clearTimeout(pending);
+    nodeEl.classList.remove('node-blink');
+    void nodeEl.offsetWidth; // force reflow
+    nodeEl.classList.add('node-blink');
+    nodeBlinkTimers.set(nodeEl, setTimeout(() => {
+        nodeBlinkTimers.delete(nodeEl);
         nodeEl.classList.remove('node-blink');
-        void nodeEl.offsetWidth; // force reflow
-        nodeEl.classList.add('node-blink');
-        setTimeout(() => {
-            nodeEl.classList.remove('node-blink');
-        }, 1050); // just past the 1s nodeBlink animation
-    }
+    }, 1050)); // just past the 1s nodeBlink animation
 }
